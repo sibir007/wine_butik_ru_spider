@@ -117,11 +117,11 @@ DOWNLOAD_TIMEOUT = 180
 # Enable and configure HTTP caching (disabled by default)
 # See https://docs.scrapy.org/en/latest/topics/downloader-middleware.html#httpcache-middleware-settings
 # Default: False
-# HTTPCACHE_ENABLED = True
+HTTPCACHE_ENABLED = True
 # Default: 0 Expiration time for cached requests, in seconds.
 # Cached requests older than this time will be re-downloaded. 
 # If zero, cached requests will never expire.
-# HTTPCACHE_EXPIRATION_SECS = 0
+HTTPCACHE_EXPIRATION_SECS = 0
 # Default: 'httpcache'
 HTTPCACHE_DIR = "httpcache"
 # Default: [] Don’t cache response with these HTTP codes.
@@ -141,7 +141,7 @@ HTTPCACHE_POLICY = 'scrapy.extensions.httpcache.DummyPolicy'
 # If enabled, will compress all cached data with gzip. 
 # This setting is specific to the Filesystem backend.
 # Default: False
-HTTPCACHE_GZIP  = False
+HTTPCACHE_GZIP  = True
 # If enabled, will cache pages unconditionally. 
 # Default: False
 HTTPCACHE_ALWAYS_STORE = False

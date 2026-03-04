@@ -11,6 +11,8 @@ class WinesSpider(scrapy.Spider):
         urls = [
             "https://wine-butik.ru/wine/?limit=40&page=1",
             "https://wine-butik.ru/wine/?limit=40&page=2",
+            "https://wine-butik.ru/wine/?limit=40&page=3",
+            "https://wine-butik.ru/wine/?limit=40&page=4",
         ]
         for url in urls:
             yield scrapy.Request(url=url, callback=self.parse)
