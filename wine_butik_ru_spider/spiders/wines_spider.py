@@ -18,5 +18,5 @@ class WinesSpider(scrapy.Spider):
     def parse(self, response: Response) -> None:
         page = response.url[-1]
         filename = f"wines-{page}.html"
-        Path(filename).write_bytes(response.body)
+        Path(filename).write_text(response.body.decode("cp1251"))
         self.log(f"Saved file {filename}")
