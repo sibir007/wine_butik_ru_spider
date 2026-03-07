@@ -33,25 +33,25 @@ def int_checker(value: str | None) -> int | None:
         res = None
     return res
 
+
+def normalize_space(value: str) -> str:
+    return " ".join(value.strip().split())
+
+
 class Prise(Item):
-    price = Field(
-        input_processor=MapCompose(partial(float_checker, 2))
-        )
+    price = Field()
     currency = Field()
 
 
+
 class Wine(Item):
-    name = Field()
-    vintage = Field(
-        input_processor=MapCompose(int_checker)
+    name = Field(
+         input_processor=MapCompose(normalize_space)
         )
+    vintage = Field()
     availability = Field()
     image_url = Field()
     price = Field()
-    bottle_volume = Field(
-        input_processor=MapCompose(partial(float_checker, 3))
-        )
-    bottle_count = Field(
-        input_processor=MapCompose(int_checker)
-        )
+    volume = Field()
+    order_size = Field()
 

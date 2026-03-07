@@ -19,7 +19,7 @@ class WinesSpider(scrapy.Spider):
 
         # 1. Начинать обход с главной страницы, каталога или sitemap (на твой выбор).
         # - начинаем с каталога            
-        url = f"{self.wine_list_query.format('page=1')}"
+        url = f"{self.wine_list_query.format('page=131')}"
         # yield Request(url=url, callback=self.test_callback)
         yield Request(url=url, callback=self.parse_cards_page)
     
@@ -61,7 +61,7 @@ class WinesSpider(scrapy.Spider):
         yield from response.follow_all(wine_cards_urls, callback=self.parse_wine_page)
 
 
-    def parse_wine_page(self, response: Response) -> Generator[Request, None, None]:
+    def parse_wine_page(self, response: Response) -> Generator[Wine, None, None]:
 
         # 3. Для каждой карточки вина формировать JSON‑объект со следующими полями:
         # - название вина;
@@ -85,8 +85,9 @@ class WinesSpider(scrapy.Spider):
         vintage = vintage_1 or response.xpath("//div[contains(@class, 'prod_param_2')]/p/em[contains(text(), 'Год')]/../text()").get(default='').strip()
 
         # - наличие (в наличии / нет);
-        availability = response.xpath("//div[contains(@class, 'product-shop wait')]/@class | //div[contains(@class, 'product-shop avail')]/@class").get(default='')
         # -- выдаётся в форме 'product-shop wait' или 'product-shop avail'
+        # -- обработку данных не стал выносить в Wine(Item) т.к. здесь удобнее это делать
+        availability = response.xpath("//div[contains(@class, 'product-shop wait')]/@class | //div[contains(@class, 'product-shop avail')]/@class").get(default='')
         match availability.split():
             case [_, a]:
                 availability = a
@@ -113,8 +114,8 @@ class WinesSpider(scrapy.Spider):
         volume_1 = response.xpath("//div[@class='product-params']/p/em[contains(text(), 'Объем')]/../text()").get(default='').strip()
         # --- в виде контента selected option из списка возможных объёмов
         volume = volume_1 or response.xpath("//div[@class='product-params']/p/em[contains(text(), 'Объем')]/..//option[@selected]/text()").get(default='').strip()
-        # -- выдаётся в форме  '0.75 л' 
-
+        # -- выдаётся в форме  '0.75 л'
+        # -- обработку оставил здесь т.к. удобнее
         match volume.split():
             case [v, _]:
                 try:
@@ -129,48 +130,17 @@ class WinesSpider(scrapy.Spider):
         # - количество бутылок (минимальный/стандартный размер заказа, если указано).
         # -- не указано на сайте
         order_size = ''
-
-
         
-        # if not volume:
-            # self.log(vintage_2)
-        if True:
-            yield  {
-                'name': name, 
-                'vintage': vintage,
-                'availability': availability,
-                'image_url': image_url,
-                'price': {'price': price, 'currency': currency},
-                'volume': volume,
-                'order_size': order_size, 
-                'url': response.url,
-            }      
-        # yield  Wine(name=name, vintage=vintage)      
-
-
-"""
-//div[@class='product-params prod_param_2']//select//option/@href
-div.product-params.prod_param_2 select.product-params-select option
-class Prise(Item):
-    price = Field(
-        input_processor=MapCompose(partial(float_checker, 2))
+        # 3. Для каждой карточки вина формировать JSON‑объект со следующими полями: ...
+        # - в Item обработки данных нет, поэтому можно было бы использовать dict,
+        # - но т.к. он уже всё равно написан - сформируем запись из него
+        yield Wine(
+            name=name,
+            vintage=vintage,
+            availability=availability,
+            image_url=image_url,
+            price=Prise(price=price, currency=currency),
+            volume=volume,
+            order_size=order_size
         )
-    currency = Field()
-
-
-class Wine(Item):
-    name = Field()
-    vintage = Field(
-        input_processor=MapCompose(int_checker)
-        )
-    availability = Field()
-    image_url = Field()
-    price = Field()
-    bottle_volume = Field(
-        input_processor=MapCompose(partial(float_checker, 3))
-        )
-    bottle_count = Field(
-        input_processor=MapCompose(int_checker)
-        )
-
-"""
+        
