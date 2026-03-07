@@ -1,7 +1,8 @@
 # from collections.abc import Iterator
 from collections.abc import Generator, AsyncGenerator
 import logging
-from typing import cast
+from pathlib import Path
+from typing import Any, cast
 
 from parsel import SelectorList
 import scrapy
@@ -14,15 +15,39 @@ from wine_butik_ru_spider.items import Wine, Prise
 class WinesSpider(scrapy.Spider):
     name = "wines"
     wine_list_query = "https://wine-butik.ru/wine/?limit=40&{}"
+    # установки для разработки
+    # устанавливаем здесь, а не в settings.py, т.к. в троекту могут быть 
+    # другие спайдеры, трубующие других настроек
+    DEV_MODE = True
+    DEV_MODE_CRAWL_PAGES_COUNT = 7 # максимальное колличество сраниц каталога для обхода
+
+    # def __init__(self, **kwargs: Any):
+    def __init__(self, **kwargs: Any):
+        # установим максимальное колличесто сраниц для обхода
+        if self.DEV_MODE:
+            self.pages_count = 0
+        super().__init__(**kwargs)
+    # # def __init__(self, name: str | None = None, **kwargs: Any):
+    #     if name is not None:
+    #         self.name: str = name
+    #     elif not getattr(self, "name", None):
+    #         raise ValueError(f"{type(self).__name__} must have a name")
+    #     self.__dict__.update(kwargs)
+    #     if not hasattr(self, "start_urls"):
+    #         self.start_urls: list[str] = []
 
     async def start(self) -> AsyncGenerator[Request, None]:
 
         # 1. Начинать обход с главной страницы, каталога или sitemap (на твой выбор).
         # - начинаем с каталога            
-        url = f"{self.wine_list_query.format('page=131')}"
+        url = f"{self.wine_list_query.format('page=1')}"
         # yield Request(url=url, callback=self.test_callback)
         yield Request(url=url, callback=self.parse_cards_page)
-    
+
+
+    def test_callback(self, response: Response)-> None:
+        Path('test.html').write_bytes(response.body)
+
 
     def follow_all_links(self, wine_cards: SelectorList, response: Response) -> Generator[Request, None, None]:
         
@@ -48,7 +73,9 @@ class WinesSpider(scrapy.Spider):
 
         # 2. Находить и переходить по всем (!) ссылкам на карточки винных товаров.
         # - задача без функциональной нагрузки, выделим в отдельный метод
-        # yield from self.follow_all_links(wine_cards, response)
+        # - сделаем доступным только в DEV резиме
+        if self.DEV_MODE:
+            yield from self.follow_all_links(wine_cards, response)
         
         # 3. Для каждой карточки вина формировать JSON‑объект со следующими полями: ...
         # хотя в каждой карте из каталога достаточно информаии для создания объекта,
@@ -56,9 +83,20 @@ class WinesSpider(scrapy.Spider):
         # - получим ссылки на страницы вин из винных карточек
         wine_cards_urls = (wine_card.xpath(".//div[@class='catalog-item__desc']/h2/a[@href]/@href").get() for wine_card in wine_cards)
         # - выполним обход по страницам отдельных вин
-        # wine_cards_urls = list(wine_cards_urls)
-        # print(len(wine_cards_urls))
         yield from response.follow_all(wine_cards_urls, callback=self.parse_wine_page)
+
+        # - выполним проверку наличия следущей страницы каталога
+        # - //div[@class='paging_box']/.//a[@class='next']/@value
+        next_page = response.xpath("//div[@class='paging_box']/.//a[@class='next']/@value").get(default='').strip()
+        if next_page:
+            # для DEV режима считаем колличиесто обойдённых страниц каталога
+            if self.DEV_MODE:
+                self.pages_count += 1
+                if self.pages_count > self.DEV_MODE_CRAWL_PAGES_COUNT:
+                    return None
+            yield Request(url=self.wine_list_query.format(next_page), callback=self.parse_cards_page)
+
+
 
 
     def parse_wine_page(self, response: Response) -> Generator[Wine, None, None]:
@@ -134,13 +172,16 @@ class WinesSpider(scrapy.Spider):
         # 3. Для каждой карточки вина формировать JSON‑объект со следующими полями: ...
         # - в Item обработки данных нет, поэтому можно было бы использовать dict,
         # - но т.к. он уже всё равно написан - сформируем запись из него
-        yield Wine(
-            name=name,
-            vintage=vintage,
-            availability=availability,
-            image_url=image_url,
-            price=Prise(price=price, currency=currency),
-            volume=volume,
-            order_size=order_size
-        )
+        # TODO: разобраться с пустыми именами
+        if not name:
+        # if True:
+            yield Wine(
+                name=name,
+                vintage=vintage,
+                availability=availability,
+                image_url=image_url,
+                price=Prise(price=price, currency=currency),
+                volume=volume,
+                order_size=order_size
+            )
         

@@ -442,7 +442,7 @@ FEED_EXPORT_ENCODING = "utf-8"
 
 # "%(spider_name)s.jsonl"
 
-FEEDS: dict = {
+# FEEDS: dict = {
     # f'feed/{util.get_curent_date_time()}.items.json': {
     #     'format': 'json',
     #     'encoding': 'utf8',
@@ -472,7 +472,7 @@ FEEDS: dict = {
     #     'overwrite': True, 
     # },
     # 'stdout': None,
-}
+# }
 
 FEED_STORAGES_BASE_for_see = {
     "": "scrapy.extensions.feedexport.FileFeedStorage",
