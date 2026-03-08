@@ -54,4 +54,5 @@ class Wine(Item):
     price = Field()
     volume = Field()
     order_size = Field()
+    url = Field()
 

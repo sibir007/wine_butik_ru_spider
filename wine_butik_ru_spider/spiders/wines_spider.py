@@ -8,6 +8,10 @@ from parsel import SelectorList
 import scrapy
 from scrapy.http import Response, Request, HtmlResponse
 from urllib import parse
+from wine_butik_ru_spider.plw import get_page_title
+import asyncio
+
+# from scrapy import 
 
 from wine_butik_ru_spider.items import Wine, Prise
 
@@ -15,32 +19,33 @@ from wine_butik_ru_spider.items import Wine, Prise
 class WinesSpider(scrapy.Spider):
     name = "wines"
     wine_list_query = "https://wine-butik.ru/wine/?limit=40&{}"
-    # установки для разработки
-    # устанавливаем здесь, а не в settings.py, т.к. в троекту могут быть 
-    # другие спайдеры, трубующие других настроек
-    DEV_MODE = True
-    DEV_MODE_CRAWL_PAGES_COUNT = 7 # максимальное колличество сраниц каталога для обхода
 
     # def __init__(self, **kwargs: Any):
-    def __init__(self, **kwargs: Any):
+    def __init__(self, dev: bool = True, dpc: str = '7', *args, **kwargs: Any):
+        """_summary_
+
+        Args:
+            dev (bool, optional): set development mode. Defaults to True.
+            dpc (str, optional): count page to crawl in dev mod. Defaults to 7.
+        """
         # установим максимальное колличесто сраниц для обхода
-        if self.DEV_MODE:
-            self.pages_count = 0
-        super().__init__(**kwargs)
-    # # def __init__(self, name: str | None = None, **kwargs: Any):
-    #     if name is not None:
-    #         self.name: str = name
-    #     elif not getattr(self, "name", None):
-    #         raise ValueError(f"{type(self).__name__} must have a name")
-    #     self.__dict__.update(kwargs)
-    #     if not hasattr(self, "start_urls"):
-    #         self.start_urls: list[str] = []
+        if dev:
+            self.DEV_MODE = True
+            try:
+                self.pages_count = int(dpc)
+            except ValueError as e:
+                self.log(f'wrong value for dpc: {dpc}, error: {e}', level=logging.ERROR)
+                self.pages_count = 7
+        super().__init__(*args, **kwargs)
 
     async def start(self) -> AsyncGenerator[Request, None]:
+
 
         # 1. Начинать обход с главной страницы, каталога или sitemap (на твой выбор).
         # - начинаем с каталога            
         url = f"{self.wine_list_query.format('page=1')}"
+        title = await get_page_title('https://playwright.dev/')
+        print('-'*20 + f'-> title: {title}')
         # yield Request(url=url, callback=self.test_callback)
         yield Request(url=url, callback=self.parse_cards_page)
 
@@ -60,7 +65,7 @@ class WinesSpider(scrapy.Spider):
         
         # 3. выполним обход
         def empty_callback(response: Response) -> None:
-            return None
+            yield None
         yield from response.follow_all(wine_cards_urls_set, callback=empty_callback)
 
 
@@ -74,8 +79,8 @@ class WinesSpider(scrapy.Spider):
         # 2. Находить и переходить по всем (!) ссылкам на карточки винных товаров.
         # - задача без функциональной нагрузки, выделим в отдельный метод
         # - сделаем доступным только в DEV резиме
-        if self.DEV_MODE:
-            yield from self.follow_all_links(wine_cards, response)
+        # if self.DEV_MODE:
+        #     yield from self.follow_all_links(wine_cards, response)
         
         # 3. Для каждой карточки вина формировать JSON‑объект со следующими полями: ...
         # хотя в каждой карте из каталога достаточно информаии для создания объекта,
@@ -91,9 +96,9 @@ class WinesSpider(scrapy.Spider):
         if next_page:
             # для DEV режима считаем колличиесто обойдённых страниц каталога
             if self.DEV_MODE:
-                self.pages_count += 1
-                if self.pages_count > self.DEV_MODE_CRAWL_PAGES_COUNT:
+                if not self.pages_count:
                     return None
+                self.pages_count -= 1
             yield Request(url=self.wine_list_query.format(next_page), callback=self.parse_cards_page)
 
 
@@ -111,8 +116,9 @@ class WinesSpider(scrapy.Spider):
         # - количество бутылок (минимальный/стандартный размер заказа, если указано).
         
         # - название вина;
-        name = response.xpath("//div[contains(@class, 'product-translation')]/span[normalize-space()]/text()").get(default='')
-
+        name = response.xpath("//div[contains(@class, 'product-translation')]/span/text()[normalize-space()]").get(default='').strip()
+        # -- если название не найдено, то попробуем найти его в другом месте
+        name = name or response.xpath("//div[contains(@class, 'product-title')]/h1/text()[normalize-space()]").get(default='').strip()
         # - винтаж (год);
         # -- может выдаваться сервером в 3-х видах:
         # --- в виде контента selected option из списка возможных годов
@@ -138,9 +144,12 @@ class WinesSpider(scrapy.Spider):
         # -- выдаётся в форме path+query (/uploads/products/new/45038.png?6172812833f175.12245300)
         if image_url:
             # -- выделим path
+            # image_url = response.urljoin(image_url)
             path = parse.urlparse(image_url).path
             # -- построим url
-            image_url = parse.urlparse(response.url)._replace(path=path, query='', fragment='').geturl()
+            image_url = response.urljoin(path)
+
+            # image_url = parse.urlparse(response.url)._replace(path=path, query='', fragment='').geturl()
 
         # - цена и валюта; price and currency
         price = response.xpath("//div[contains(@id, 'product-price')]/div[2]/text()").get(default='')
@@ -172,9 +181,17 @@ class WinesSpider(scrapy.Spider):
         # 3. Для каждой карточки вина формировать JSON‑объект со следующими полями: ...
         # - в Item обработки данных нет, поэтому можно было бы использовать dict,
         # - но т.к. он уже всё равно написан - сформируем запись из него
-        # TODO: разобраться с пустыми именами
-        if not name:
-        # if True:
+        yield Wine(
+            name=name,
+            vintage=vintage,
+            availability=availability,
+            image_url=image_url,
+            price=Prise(price=price, currency=currency),
+            volume=volume,
+            order_size=order_size,
+        )
+        
+        if False:
             yield Wine(
                 name=name,
                 vintage=vintage,
@@ -182,6 +199,6 @@ class WinesSpider(scrapy.Spider):
                 image_url=image_url,
                 price=Prise(price=price, currency=currency),
                 volume=volume,
-                order_size=order_size
+                order_size=order_size,
+                url = response.url
             )
-        

@@ -56,12 +56,12 @@ DOWNLOADER_MIDDLEWARES: dict = {
 #    "scrapy.downloadermiddlewares.robotstxt.RobotsTxtMiddleware": None,
 }
 
-f"-----------------ProxyDownloaderMiddleware------------------"
+# f"-----------------ProxyDownloaderMiddleware------------------"
 # VZLJOT_PROXY = 'http://login:password@proxy:3128'
 
 
 
-"-----------------CookiesMiddleware------------------"
+# "-----------------CookiesMiddleware------------------"
 # scrapy.downloadermiddlewares.cookies.CookiesMiddleware
 # Disable cookies (enabled by default)
 # Default: True. 
@@ -70,7 +70,7 @@ COOKIES_ENABLED = True
 # and all cookies received in responses (i.e. Set-Cookie header).
 COOKIES_DEBUG = True
 
-"-----------------DefaultHeadersMiddleware------------"
+# "-----------------DefaultHeadersMiddleware------------"
 # scrapy.downloadermiddlewares.defaultheaders.DefaultHeadersMiddleware
 #default headers
 # {
@@ -90,14 +90,15 @@ COOKIES_DEBUG = True
 #     "Sec-Fetch-Mode": "cors",
 #     "Sec-Fetch-Site": "same-origin"
 # }
-"-------------DownloadTimeoutMiddleware---------------"
+
+# "-------------DownloadTimeoutMiddleware---------------"
 # scrapy.downloadermiddlewares.downloadtimeout.DownloadTimeoutMiddleware
 # Default: 180 
 # The amount of time (in secs) that the downloader will wait before timing out.
 DOWNLOAD_TIMEOUT = 180
 
 
-"-------------HttpAuthMiddleware---------------------"
+# "-------------HttpAuthMiddleware---------------------"
 # scrapy.downloadermiddlewares.httpauth.HttpAuthMiddleware
 # Enable and configure the AutoThrottle extension (disabled by default)
 # See https://docs.scrapy.org/en/latest/topics/autothrottle.html
@@ -113,7 +114,7 @@ DOWNLOAD_TIMEOUT = 180
 #AUTOTHROTTLE_DEBUG = False
 
 
-"-----------------HttpCacheMiddleware----------------"
+# "-----------------HttpCacheMiddleware----------------"
 # scrapy.downloadermiddlewares.httpcache.HttpCacheMiddleware
 # Enable and configure HTTP caching (disabled by default)
 # See https://docs.scrapy.org/en/latest/topics/downloader-middleware.html#httpcache-middleware-settings
@@ -150,7 +151,7 @@ HTTPCACHE_ALWAYS_STORE = False
 # Default: []
 HTTPCACHE_IGNORE_RESPONSE_CACHE_CONTROLS: list = []
 
-"-----------------HttpCompressionMiddleware--------------"
+# "-----------------HttpCompressionMiddleware--------------"
 # scrapy.downloadermiddlewares.httpcompression.HttpCompressionMiddleware
 # Whether the Compression middleware will be enabled.
 # This middleware allows compressed (gzip, deflate) traffic 
@@ -161,7 +162,7 @@ HTTPCACHE_IGNORE_RESPONSE_CACHE_CONTROLS: list = []
 # Default: True
 COMPRESSION_ENABLED = True
 
-"-----------------HttpProxyMiddleware--------------"
+# "-----------------HttpProxyMiddleware--------------"
 # scrapy.downloadermiddlewares.httpproxy.HttpProxyMiddleware
 # Default: True
 HTTPPROXY_ENABLED = True
@@ -169,7 +170,7 @@ HTTPPROXY_ENABLED = True
 HTTPPROXY_AUTH_ENCODING = "latin-1"
 # 
 
-"-----------------RedirectMiddleware--------------"
+# "-----------------RedirectMiddleware--------------"
 # scrapy.downloadermiddlewares.redirect.RedirectMiddleware
 # This middleware handles redirection of requests based on response status.
 # Default: True
@@ -226,14 +227,14 @@ RETRY_PRIORITY_ADJUST = -1
 ROBOTSTXT_OBEY = False
 
 
-"-----------------DownloaderStats--------------"
+# "-----------------DownloaderStats--------------"
 # scrapy.downloadermiddlewares.stats.DownloaderStats
 # Middleware that stores stats of all requests, responses 
 # and exceptions that pass through it.
 # Default: True
 DOWNLOADER_STATS = True
 
-"-----------------UserAgentMiddleware--------------"
+# "-----------------UserAgentMiddleware--------------"
 # scrapy.downloadermiddlewares.useragent.UserAgentMiddleware
 # Middleware that allows spiders to override the default user agent.
 # Default
@@ -256,13 +257,13 @@ DOWNLOADER_STATS = True
 #     "Opera/9.80 (Macintosh; Intel Mac OS X 10.6.8; U; fr) Presto/2.9.168 Version/11.52",
 # ]
 
-"-----------------AjaxCrawlMiddleware--------------"
+# "-----------------AjaxCrawlMiddleware--------------"
 # scrapy.downloadermiddlewares.ajaxcrawl.AjaxCrawlMiddleware
 # Middleware that finds ‘AJAX crawlable’ page variants based on meta-fragment html tag.
 # Default: False
 AJAXCRAWL_ENABLED = False
 
-"================ Spider Middleware ==================="
+# "================ Spider Middleware ==================="
 # Enable or disable spider middlewares
 # See https://docs.scrapy.org/en/latest/topics/spider-middleware.html
 # Default: {}
@@ -278,7 +279,7 @@ SPIDER_MIDDLEWARES_BASE_for_see = {
     "scrapy.spidermiddlewares.depth.DepthMiddleware": 900,
 }
 
-"-----------------DepthMiddleware--------------"
+# "-----------------DepthMiddleware--------------"
 # scrapy.spidermiddlewares.depth.DepthMiddlewar
 # The maximum depth that will be allowed to crawl for any site. 
 # If zero, no limit will be imposed.
@@ -292,7 +293,7 @@ DEPTH_PRIORITY = 0
 # Default: False
 DEPTH_STATS_VERBOSE = False
 
-"-----------------HttpErrorMiddleware--------------"
+# "-----------------HttpErrorMiddleware--------------"
 # Filter out unsuccessful (erroneous) HTTP responses so that spiders don’t 
 # have to deal with them, which (most of the time) imposes an overhead, 
 # consumes more resources, and makes the spider logic more complex. 
@@ -305,7 +306,7 @@ HTTPERROR_ALLOWED_CODES: list = []
 # Default: False
 HTTPERROR_ALLOW_ALL = False
 
-"-----------------OffsiteMiddleware--------------"
+# "-----------------OffsiteMiddleware--------------"
 # Filters out Requests for URLs outside the domains covered by the spider.
 # This middleware filters out every request whose host names aren’t in 
 # the spider’s allowed_domains attribute
@@ -314,7 +315,7 @@ HTTPERROR_ALLOW_ALL = False
 # If the request has the dont_filter attribute set, the offsite middleware 
 # will allow the request even if its domain is not listed in allowed domains.
 
-"-----------------RefererMiddleware--------------"
+# "-----------------RefererMiddleware--------------"
 # Populates Request Referer header, based on the URL of the Response which generated it.
 # Whether to enable referer middleware.
 # Default: True
@@ -323,7 +324,7 @@ REFERER_ENABLED = True
 # Default: 'scrapy.spidermiddlewares.referer.DefaultReferrerPolicy'
 REFERRER_POLICY = 'scrapy.spidermiddlewares.referer.DefaultReferrerPolicy'
 
-"-----------------UrlLengthMiddleware--------------"
+# "-----------------UrlLengthMiddleware--------------"
 # Filters out requests with URLs longer than URLLENGTH_LIMIT
 # Default: 2083
 URLLENGTH_LIMIT = 2083
@@ -331,7 +332,7 @@ URLLENGTH_LIMIT = 2083
 
 
 
-"================ EXTENSIONS ==================="
+# "================ EXTENSIONS ==================="
 # Typically, extensions connect to signals and perform tasks triggered by them.
 
 EXTENSIONS_BASE_for_see = {
@@ -352,20 +353,20 @@ EXTENSIONS_BASE_for_see = {
 #    "scrapy.extensions.telnet.TelnetConsole": None,
 #}
 
-"-----------------LogStats--------------"
+# "-----------------LogStats--------------"
 # scrapy.extensions.logstats.LogStats
 # Log basic stats like crawled pages and scraped items.
 
-"-----------------CoreStats--------------"
+# "-----------------CoreStats--------------"
 # scrapy.extensions.corestats.CoreStats
 # Enable the collection of core statistics, provided the stats collection is enabled
 
-"-----------------TelnetConsole--------------"
+# "-----------------TelnetConsole--------------"
 # scrapy.extensions.telnet.TelnetConsole
 # Provides a telnet console for getting into a Python interpreter inside the currently 
 # running Scrapy process, which can be very useful for debugging.
 
-"-----------------MemoryUsage--------------"
+# "-----------------MemoryUsage--------------"
 # scrapy.extensions.memusage.MemoryUsage
 # Monitors the memory used by the Scrapy process that runs the spider and:
 # sends a notification e-mail when it exceeds a certain value
@@ -377,14 +378,14 @@ EXTENSIONS_BASE_for_see = {
 # MEMUSAGE_CHECK_INTERVAL_SECONDS
 
 
-"-----------------MemoryDebugger--------------"
+# "-----------------MemoryDebugger--------------"
 # scrapy.extensions.memdebug.MemoryDebugger
 # An extension for debugging memory usage. It collects information about:
 # objects uncollected by the Python garbage collector
 # objects left alive that shouldn’t. For more info, see Debugging memory leaks with trackref
 # To enable this extension, turn on the MEMDEBUG_ENABLED setting. The info will be stored in the stats.
 
-"-----------------CloseSpider--------------"
+# "-----------------CloseSpider--------------"
 # scrapy.extensions.closespider.CloseSpider
 # Closes a spider automatically when some conditions are met, using a specific closing reason for each condition.
 # The conditions for closing a spider can be configured through the following settings:
@@ -395,7 +396,7 @@ EXTENSIONS_BASE_for_see = {
 # CLOSESPIDER_ERRORCOUNT
 
 
-"-----------------StatsMailer--------------"
+# "-----------------StatsMailer--------------"
 # scrapy.extensions.statsmailer.StatsMailer
 # This simple extension can be used to send a notification e-mail every 
 # time a domain has finished scraping, including the Scrapy stats collected. 
@@ -404,11 +405,11 @@ EXTENSIONS_BASE_for_see = {
 # including examples on how to instantiate MailSender and use mail settings, 
 # see Sending e-mail.
 
-"-----------------PeriodicLog--------------"
+# "-----------------PeriodicLog--------------"
 # scrapy.extensions.periodic_log.PeriodicLog
 # This extension periodically logs rich stat data as a JSON object:
 
-"-----------------StackTraceDump--------------"
+# "-----------------StackTraceDump--------------"
 # scrapy.extensions.periodic_log.StackTraceDump
 # Dumps information about the running process when a SIGQUIT or 
 # SIGUSR2 signal is received. The information dumped is the following:
@@ -417,7 +418,7 @@ EXTENSIONS_BASE_for_see = {
 
 
 
-"================ ITEM_PIPELINE ==================="
+# "================ ITEM_PIPELINE ==================="
 # Configure item pipelines
 # See https://docs.scrapy.org/en/latest/topics/item-pipeline.html
 ITEM_PIPELINES: dict = {
@@ -433,7 +434,7 @@ REQUEST_FINGERPRINTER_IMPLEMENTATION = "2.7"
 TWISTED_REACTOR = "twisted.internet.asyncioreactor.AsyncioSelectorReactor"
 FEED_EXPORT_ENCODING = "utf-8"
 
-"================ Feed exports ==================="
+# "================ Feed exports ==================="
 # Scrapy generates multiple output files storing up 
 # to the specified number of items in each output file.
 # dirname/%(batch_id)d-filename%(batch_time)s.json"
@@ -442,19 +443,20 @@ FEED_EXPORT_ENCODING = "utf-8"
 
 # "%(spider_name)s.jsonl"
 
+
 # FEEDS: dict = {
-    # f'feed/{util.get_curent_date_time()}.items.json': {
-    #     'format': 'json',
-    #     'encoding': 'utf8',
-    #     'store_empty': False,
-    #     # 'item_classes': [f'{BOT_NAME}.items.TorgiGovRuItem',], # [MyItemClass1, 'myproject.items.MyItemClass2'],
-    #     'fields': None,
-    #     'indent': 4,
-    #     'item_export_kwargs': {
-    #        'export_empty_fields': True,
-    #     },
-    #     'overwrite': True, 
-    # },
+#     f'feed/wines_%(time).jsonl': {
+#         'format': 'jsonlines',
+#         'encoding': 'utf8',
+#         'store_empty': False,
+#         # 'item_classes': [f'{BOT_NAME}.items.TorgiGovRuItem',], # [MyItemClass1, 'myproject.items.MyItemClass2'],
+#         'fields': None,
+#         # 'indent': 4,
+#         'item_export_kwargs': {
+#            'export_empty_fields': True,
+#         },
+#         'overwrite': True, 
+#     },
     # f'feed/{BOT_NAME}.items.xml': {
     #     'format': 'xml',
     #     # 'fields': ['reg_num', 'reg_num_href'],
@@ -502,7 +504,7 @@ FEED_EXPORTERS = {
     "pickle": None,
 }
 
-"================ Logging ==================="
+# "================ Logging ==================="
 # logging.CRITICAL - for critical errors (highest severity)
 # logging.ERROR - for regular errors
 # logging.WARNING - for warning messages
