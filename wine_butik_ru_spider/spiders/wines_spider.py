@@ -7,14 +7,15 @@ from typing import Any, cast
 from parsel import SelectorList
 import scrapy
 from scrapy.http import Response, Request, HtmlResponse
-from urllib import parse
-from wine_butik_ru_spider.plw import start_cawl
-import asyncio
 
 # from scrapy import 
 
 from wine_butik_ru_spider.items import Wine, Prise
-from wine_butik_ru_spider.util import AVAILABILITY_XPATH, CURRENCY_XPATH, IMG_URL_XPATH, NEXT_PAGE_XPATH, PRICE_XPATH, VINTAGE1_XPATH, VINTAGE2_XPATH, VOLUME1_XPATH, VOLUME2_XPATH, WINE_CARDS_XPATH, WINE_HREFS_XPATH, WINE_NAME1_XPATH, WINE_NAME2_XPATH, availability_convert, image_url_conver, volume_convert
+from wine_butik_ru_spider.util import (
+    AVAILABILITY_XPATH, CURRENCY_XPATH, IMG_URL_XPATH, NEXT_PAGE_XPATH, 
+    PRICE_XPATH, VINTAGE1_XPATH, VINTAGE2_XPATH, VOLUME1_XPATH, VOLUME2_XPATH, 
+    WINE_CARDS_XPATH, WINE_HREFS_XPATH, WINE_NAME1_XPATH, WINE_NAME2_XPATH, 
+    availability_convert, image_url_conver, volume_convert)
 
 
 class WinesSpider(scrapy.Spider):
