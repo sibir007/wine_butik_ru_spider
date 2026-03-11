@@ -8,12 +8,13 @@ from parsel import SelectorList
 import scrapy
 from scrapy.http import Response, Request, HtmlResponse
 from urllib import parse
-from wine_butik_ru_spider.plw import get_page_title
+from wine_butik_ru_spider.plw import parse_wine_catalog
 import asyncio
 
 # from scrapy import 
 
 from wine_butik_ru_spider.items import Wine, Prise
+from wine_butik_ru_spider.util import AVAILABILITY_XPATH, CURRENCY_XPATH, IMG_URL_XPATH, NEXT_PAGE_XPATH, PRICE_XPATH, VINTAGE1_XPATH, VINTAGE2_XPATH, VOLUME1_XPATH, VOLUME2_XPATH, WINE_CARDS_XPATH, WINE_HREFS_XPATH, WINE_NAME1_XPATH, WINE_NAME2_XPATH, availability_convert, image_url_conver, volume_convert
 
 
 class WinesSpider(scrapy.Spider):
@@ -44,8 +45,8 @@ class WinesSpider(scrapy.Spider):
         # 1. Начинать обход с главной страницы, каталога или sitemap (на твой выбор).
         # - начинаем с каталога            
         url = f"{self.wine_list_query.format('page=1')}"
-        title = await get_page_title('https://playwright.dev/')
-        print('-'*20 + f'-> title: {title}')
+        # title = await get_page_title('https://playwright.dev/')
+        # print('-'*20 + f'-> title: {title}')
         # yield Request(url=url, callback=self.test_callback)
         yield Request(url=url, callback=self.parse_cards_page)
 
@@ -64,7 +65,7 @@ class WinesSpider(scrapy.Spider):
         wine_cards_urls_set = set(wine_cards_urls)
         
         # 3. выполним обход
-        def empty_callback(response: Response) -> None:
+        def empty_callback(response: Response) -> Generator[None, None, None]:
             yield None
         yield from response.follow_all(wine_cards_urls_set, callback=empty_callback)
 
@@ -74,7 +75,8 @@ class WinesSpider(scrapy.Spider):
         response = cast(HtmlResponse, response)
         
         # сформируем SelectorList всех винных карт на странице
-        wine_cards: SelectorList = response.xpath("//div[@class='catalog-item']")
+        
+        wine_cards: SelectorList = response.xpath(WINE_CARDS_XPATH)
 
         # 2. Находить и переходить по всем (!) ссылкам на карточки винных товаров.
         # - задача без функциональной нагрузки, выделим в отдельный метод
@@ -86,13 +88,14 @@ class WinesSpider(scrapy.Spider):
         # хотя в каждой карте из каталога достаточно информаии для создания объекта,
         # перейдём на страницу вина и возьмём всю информацию оттуда, для этого:
         # - получим ссылки на страницы вин из винных карточек
-        wine_cards_urls = (wine_card.xpath(".//div[@class='catalog-item__desc']/h2/a[@href]/@href").get() for wine_card in wine_cards)
+
+        wine_cards_urls = (wine_card.xpath(WINE_HREFS_XPATH).get() for wine_card in wine_cards)
         # - выполним обход по страницам отдельных вин
         yield from response.follow_all(wine_cards_urls, callback=self.parse_wine_page)
 
         # - выполним проверку наличия следущей страницы каталога
         # - //div[@class='paging_box']/.//a[@class='next']/@value
-        next_page = response.xpath("//div[@class='paging_box']/.//a[@class='next']/@value").get(default='').strip()
+        next_page = response.xpath(NEXT_PAGE_XPATH).get(default='').strip()
         if next_page:
             # для DEV режима считаем колличиесто обойдённых страниц каталога
             if self.DEV_MODE:
@@ -116,63 +119,42 @@ class WinesSpider(scrapy.Spider):
         # - количество бутылок (минимальный/стандартный размер заказа, если указано).
         
         # - название вина;
-        name = response.xpath("//div[contains(@class, 'product-translation')]/span/text()[normalize-space()]").get(default='').strip()
+        name = response.xpath(WINE_NAME1_XPATH).get(default='').strip()
         # -- если название не найдено, то попробуем найти его в другом месте
-        name = name or response.xpath("//div[contains(@class, 'product-title')]/h1/text()[normalize-space()]").get(default='').strip()
+        name = name or response.xpath(WINE_NAME2_XPATH).get(default='').strip()
         # - винтаж (год);
         # -- может выдаваться сервером в 3-х видах:
         # --- в виде контента selected option из списка возможных годов
-        vintage_1 = response.xpath("//div[contains(@class, 'prod_param_2')]/.//option[@selected]/text()").get(default='').strip()
+        vintage_1 = response.xpath(VINTAGE1_XPATH).get(default='').strip()
         # --- в виде контента p где потомок em содержит 'Год' и контент содержит сам год 
         # vintage_2 = response.xpath("//div[contains(@class, 'prod_param_2')]/p/em[contains(text(), 'Год')]/../text()").get()
         # --- либо год не указан вообще
-        vintage = vintage_1 or response.xpath("//div[contains(@class, 'prod_param_2')]/p/em[contains(text(), 'Год')]/../text()").get(default='').strip()
+        vintage = vintage_1 or response.xpath(VINTAGE2_XPATH).get(default='').strip()
 
         # - наличие (в наличии / нет);
         # -- выдаётся в форме 'product-shop wait' или 'product-shop avail'
         # -- обработку данных не стал выносить в Wine(Item) т.к. здесь удобнее это делать
-        availability = response.xpath("//div[contains(@class, 'product-shop wait')]/@class | //div[contains(@class, 'product-shop avail')]/@class").get(default='')
-        match availability.split():
-            case [_, a]:
-                availability = a
-            case _:
-                self.log(f'unrecognized value of availability: {availability}', level=logging.ERROR)
-                availability = ''
+        availability: str = response.xpath(AVAILABILITY_XPATH).get(default='')
+        availability = availability_convert(availability)
 
         # - URL основной картинки товара;
-        image_url = response.xpath("//img[contains(@class, 'product-image-large')]/@src").get(default='')
+        image_url = response.xpath(IMG_URL_XPATH).get(default='')
         # -- выдаётся в форме path+query (/uploads/products/new/45038.png?6172812833f175.12245300)
-        if image_url:
-            # -- выделим path
-            # image_url = response.urljoin(image_url)
-            path = parse.urlparse(image_url).path
-            # -- построим url
-            image_url = response.urljoin(path)
-
-            # image_url = parse.urlparse(response.url)._replace(path=path, query='', fragment='').geturl()
+        image_url = image_url_conver(response.url, image_url)
 
         # - цена и валюта; price and currency
-        price = response.xpath("//div[contains(@id, 'product-price')]/div[2]/text()").get(default='')
-        currency = response.xpath("//div[contains(@id, 'product-price')]/div[3]/text()").get(default='')
+        price = response.xpath(PRICE_XPATH).get(default='')
+        currency = response.xpath(CURRENCY_XPATH).get(default='')
 
         # - объем бутылки (например, 375ml, 750ml, 1500ml);
         # -- выдаётся:
         # --- в виде контента p где потомок em содержит 'Объем' и контент содержит сам объём 
-        volume_1 = response.xpath("//div[@class='product-params']/p/em[contains(text(), 'Объем')]/../text()").get(default='').strip()
+        volume_1 = response.xpath(VOLUME1_XPATH).get(default='').strip()
         # --- в виде контента selected option из списка возможных объёмов
-        volume = volume_1 or response.xpath("//div[@class='product-params']/p/em[contains(text(), 'Объем')]/..//option[@selected]/text()").get(default='').strip()
+        volume = volume_1 or response.xpath(VOLUME2_XPATH).get(default='').strip()
         # -- выдаётся в форме  '0.75 л'
         # -- обработку оставил здесь т.к. удобнее
-        match volume.split():
-            case [v, _]:
-                try:
-                    volume = str(int(float(v)*1000)) + 'ml'
-                except ValueError as e:
-                    self.log(e, level=logging.ERROR)
-                    volume = ''
-            case _:
-                self.log(f'unrecognized value of volume: {volume}', level=logging.ERROR)
-                volume = ''
+        volume = volume_convert(volume)
 
         # - количество бутылок (минимальный/стандартный размер заказа, если указано).
         # -- не указано на сайте
@@ -202,3 +184,7 @@ class WinesSpider(scrapy.Spider):
                 order_size=order_size,
                 url = response.url
             )
+
+
+
+
