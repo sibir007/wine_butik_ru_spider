@@ -3,8 +3,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 import functools
 import re
-from typing import Any, Literal, NamedTuple
-
+from typing import Iterable
+from items import Wine
 from playwright.async_api import BrowserContext, Locator, Response, async_playwright, Page, expect
 from playwright.async_api import TimeoutError, Error
 # from wine_butik_ru_spider.items import Wine, Prise
@@ -34,7 +34,11 @@ VOLUME2_XPATH = "//div[@class='product-params']/p/em[contains(text(), 'Объе�
 start_page = 'https://wine-butik.ru/'
 XPATH_PREF = 'xpath={}'
 
-# page = 'https://intoli.com/blog/not-possible-to-block-chrome-headless/chrome-headless-test.html'
+type ParseWinePageResult = tuple[WinePageGoToResult, ParseResult | None]
+type ParseCatalogPageResult = list[ParseWinePageResult]
+
+FEED: list[Wine]  = []
+        
 
 class PageGoToStatus(Enum):
     OK = 'OK'
@@ -52,8 +56,6 @@ class WinePageResult:
     result: bool = True
     err_type: Error | TimeoutError | None = None
     err_atrr_results: list[WineAtrrResoult] = field(default_factory=list)
-
-
 
 
 @dataclass
@@ -77,7 +79,7 @@ class NavigationError(Error):
 class ResponseError(Error):
     pass
 
-async def parse_wine_catalog(browser_context: BrowserContext):
+async def start_cawl(browser_context: BrowserContext, semaphore: Semaphore):
     parse_result = ParseResult()
     start_page_url = 'https://wine-butik.ru/'
 
@@ -105,8 +107,7 @@ async def parse_wine_catalog(browser_context: BrowserContext):
     # перейдём по ссылки для загрузки каталога вин
     try:
         await wines_catalog_link_locator.click()
-        # дождёмся загрузки каталога
-        
+        # дождёмся загрузки каталога        
         await page.wait_for_url(f'**{wines_catalog_link_path}')
 
     except Error as e:
@@ -115,48 +116,45 @@ async def parse_wine_catalog(browser_context: BrowserContext):
         return parse_result
     else:
         parse_result.CatalogPageGoToResults.append(WinePageGoToResult(page_url=page.url))
+    parse_catalog_gage_result: ParseCatalogPageResult \
+        = await crawl_wine_catalog_page(
+            browser_context,
+            semaphore,
+            page
+            )
+    
 
-
-    # wine_cards: list[Locator] =  await page.locator(WINE_CARDS_XPATH).all()
-    # получим все локаторы ссылок на строницы вин
+async def crawl_wine_catalog_page(browser_context: BrowserContext, semaphore: Semaphore, wine_catalog_pag: Page) -> ParseCatalogPageResult:
     wine_card_paths: list[str | None] =  [await l.get_attribute('href') 
                                                   for l 
-                                                  in await page.locator("xpath=//div[@class='catalog-item__desc']/h2/a[@href]").all()]
+                                                  in await wine_catalog_pag.locator(XPATH_PREF.format(WINE_HREFS_XPATH)).all()]
 
+    wine_card_urls: list[str] = [urljoin(wine_catalog_pag.url, p) for p in wine_card_paths if p is not None]
 
-    wine_card_urls: list[str] = [urljoin(page.url, p) for p in wine_card_paths if p is not None]
-
-
-
-    async def goto_wine_page(browser_context: BrowserContext, page_url: str, referer: str, semaphore: Semaphore) -> tuple[WinePageGoToResult, ParseResult | None] :
-        async with semaphore:
-            page = await browser_context.new_page()
-            try:
-                response = await page.goto(page_url, referer=referer)
-                handle_response(page.url, response)
-            except Error as e:
-                page_goto_result = handle_page_goto_error(start_page_url, e)
-                return (page_goto_result, None)
-            else:
-                page_goto_result = WinePageGoToResult(page_url=page.url)
-            await page.wait_for_timeout(5000)
-            await page.close()
-        return True
+    parse_tacks_batch = [goto_wine_page(browser_context, url, wine_catalog_pag.url, semaphore) for url in wine_card_urls] 
     
-    semaphore = Semaphore(3)
-
-    parse_tacks_bath = [goto_wine_page(browser_context, url, page.url, semaphore) for url in wine_card_urls] 
-    
-    tack_bath_results = await asyncio.gather(*parse_tacks_bath)
+    tack_batch_results = await asyncio.gather(*parse_tacks_batch)
                                                     
 
-    print(f'resoult len {len(tack_bath_results)}')
+    print(f'resoult len {len(tack_batch_results)}')
+    return tack_batch_results
 
 
+async def goto_wine_page(browser_context: BrowserContext, page_url: str, referer: str, semaphore: Semaphore) -> ParseWinePageResult :
+    async with semaphore:
+        page = await browser_context.new_page()
+        try:
+            response = await page.goto(page_url, referer=referer)
+            handle_response(page.url, response)
+        except Error as e:
+            page_goto_result = handle_page_goto_error(page.url, e)
+            return (page_goto_result, None)
+        else:
+            page_goto_result = WinePageGoToResult(page_url=page.url)
+        await page.wait_for_timeout(5000)
+        await page.close()
+    return True
 
-    
-
-    await page.wait_for_timeout(5000)
 
 def handle_response(page_url: str, response: Response | None):
     if response is None:
@@ -184,7 +182,8 @@ async def main():
         )
 
         browser_context = await browser.new_context(no_viewport=True)
-        await parse_wine_catalog(browser_context)
+        semaphore = Semaphore(3)
+        await start_cawl(browser_context, semaphore)
         await browser.close()
 
 

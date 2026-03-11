@@ -8,7 +8,7 @@ from parsel import SelectorList
 import scrapy
 from scrapy.http import Response, Request, HtmlResponse
 from urllib import parse
-from wine_butik_ru_spider.plw import parse_wine_catalog
+from wine_butik_ru_spider.plw import start_cawl
 import asyncio
 
 # from scrapy import 
