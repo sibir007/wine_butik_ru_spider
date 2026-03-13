@@ -1,84 +1,37 @@
-# from collections.abc import Iterator
-from collections.abc import Generator, AsyncGenerator
-import logging
-from pathlib import Path
-from typing import Any, cast
+# https://wine-butik.ru/ скраппер 
 
-from parsel import SelectorList
-import scrapy
-from scrapy.http import Response, Request, HtmlResponse
+# SRS 
 
-# from scrapy import 
+Для сайта нужно реализовать Scrapy‑паука, который обходит сайт и собирает только карточки винных товаров.​
+> выполнено в двух вариантах: на **Scrapy** и **Playwright**
 
-from wine_butik_ru_spider.items import Wine, Prise
-from wine_butik_ru_spider.util import (
-    AVAILABILITY_XPATH, CURRENCY_XPATH, IMG_URL_XPATH, NEXT_PAGE_XPATH, 
-    PRICE_XPATH, VINTAGE1_XPATH, VINTAGE2_XPATH, VOLUME1_XPATH, VOLUME2_XPATH, 
-    WINE_CARDS_XPATH, WINE_HREFS_XPATH, WINE_NAME1_XPATH, WINE_NAME2_XPATH, 
-    availability_convert, image_url_conver, volume_convert)
-
-
-class WinesSpider(scrapy.Spider):
-    name = "wines"
-    wine_list_query = "https://wine-butik.ru/wine/?limit=40&{}"
-
-    # def __init__(self, **kwargs: Any):
-    def __init__(self, dev: bool = True, dpc: str = '7', *args, **kwargs: Any):
-        """_summary_
-
-        Args:
-            dev (bool, optional): set development mode. Defaults to True.
-            dpc (str, optional): count page to crawl in dev mod. Defaults to 7.
-        """
-
-        # установим максимальное колличесто сраниц для обхода
-        if dev:
-            self.DEV_MODE = True
-            try:
-                self.pages_count = int(dpc)
-            except ValueError as e:
-                self.log(f'wrong value for dpc: {dpc}, error: {e}', level=logging.ERROR)
-                self.pages_count = 7
-        super().__init__(*args, **kwargs)
-
-    async def start(self) -> AsyncGenerator[Request, None]:
-
-
-        # 1. Начинать обход с главной страницы, каталога или sitemap (на твой выбор).
-        # - начинаем с каталога            
-        url = f"{self.wine_list_query.format('page=1')}"
-        yield Request(url=url, callback=self.parse_cards_page)
-
-
-    def test_callback(self, response: Response)-> None:
-        Path('test.html').write_bytes(response.body)
-
-
+Пауку необходимо:
+1. Начинать обход с главной страницы, каталога или sitemap (на твой выбор).
+    > Выплнено. 
+    ```py
+   async def start(self) -> AsyncGenerator[Request, None]:
+      # 1. Начинать обход с главной страницы, каталога или sitemap (на твой выбор).
+      # - начинаем с каталога            
+      url = f"{self.wine_list_query.format('page=1')}"
+      yield Request(url=url, callback=self.parse_cards_page)
+    ```
+2. Находить и переходить по всем (!) ссылкам на карточки винных товаров.
+    > Выполнено 
+    ```py
     def parse_cards_page(self, response: Response) -> Generator[Request, None, None]:
-
-        response = cast(HtmlResponse, response)
-        
         # 2. Находить и переходить по всем (!) ссылкам на карточки винных товаров.
         # сформируем SelectorList всех винных карт на странице
         wine_cards: SelectorList = response.xpath(WINE_CARDS_XPATH)
         wine_cards_urls = (wine_card.xpath(WINE_HREFS_XPATH).get() for wine_card in wine_cards)
         # - выполним обход по страницам отдельных вин
         yield from response.follow_all(wine_cards_urls, callback=self.parse_wine_page)
-        
-        # - выполним проверку наличия следущей страницы каталога
-        next_page = response.xpath(NEXT_PAGE_XPATH).get(default='').strip()
-        if next_page:
-            # для DEV режима считаем колличиесто обойдённых страниц каталога
-            if self.DEV_MODE:
-                if not self.pages_count:
-                    return None
-                self.pages_count -= 1
-            yield Request(url=self.wine_list_query.format(next_page), callback=self.parse_cards_page)
 
+    ```
 
-
-
-    def parse_wine_page(self, response: Response) -> Generator[Wine, None, None]:
+3. Для каждой карточки вина формировать JSON‑объект со следующими полями:
+    > Выполнено
+    ```py
+     def parse_wine_page(self, response: Response) -> Generator[Wine, None, None]:
 
         # 3. Для каждой карточки вина формировать JSON‑объект со следующими полями:
         # - название вина;
@@ -93,12 +46,12 @@ class WinesSpider(scrapy.Spider):
         name = response.xpath(WINE_NAME1_XPATH).get(default='').strip()
         # -- если название не найдено, то попробуем найти его в другом месте
         name = name or response.xpath(WINE_NAME2_XPATH).get(default='').strip()
+
         # - винтаж (год);
         # -- может выдаваться сервером в 3-х видах:
         # --- в виде контента selected option из списка возможных годов
         vintage_1 = response.xpath(VINTAGE1_XPATH).get(default='').strip()
         # --- в виде контента p где потомок em содержит 'Год' и контент содержит сам год 
-        # vintage_2 = response.xpath("//div[contains(@class, 'prod_param_2')]/p/em[contains(text(), 'Год')]/../text()").get()
         # --- либо год не указан вообще
         vintage = vintage_1 or response.xpath(VINTAGE2_XPATH).get(default='').strip()
 
@@ -140,6 +93,9 @@ class WinesSpider(scrapy.Spider):
             volume=volume,
             order_size=order_size,
         )
-        
 
+    ```
 
+4. Инструкция, как запустить паука и получить JSON‑выгрузку (README или описание в отклике).
+
+Краткий комментарий, какие сложности встретились и как они решены (структура сайта, пагинация, фильтры и т.д.).

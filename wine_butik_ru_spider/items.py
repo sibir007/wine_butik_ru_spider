@@ -5,11 +5,8 @@
 
 
 
-from decimal import Decimal, localcontext
 from itemloaders.processors import MapCompose
 from scrapy import Item, Field
-from dataclasses import dataclass, field
-from functools import partial
 
 
 def str_mum_san(value: str) -> str:
