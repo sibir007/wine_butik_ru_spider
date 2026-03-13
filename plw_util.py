@@ -22,7 +22,7 @@ class Resoult:
 
 @dataclass
 class CatalogPageGoToResult(Resoult):
-    err_type: str | None = None
+    err_type: list[str] = field(default_factory=list)
 
 @dataclass
 class WinePageGoToResult(CatalogPageGoToResult):
@@ -95,7 +95,7 @@ class JsonFeed(Feed):
     
     def close(self):
         with open(self.file_name, 'w') as f:
-            f.write(json.dumps(self.feed))
+            f.write(json.dumps(self.feed, indent=2, ensure_ascii=False))
 
 
 
@@ -121,6 +121,7 @@ async def test_main() -> list[WineAtrrResoult]:
         page = await browser_context.new_page()
         for url in test_urls:
             response = await page.goto(url, wait_until='domcontentloaded')
+            # page.co
             page.set_default_timeout(timeout=10000)
             res = await get_volume_handle_result(page, parse_resoult)
             # res = await get_currency_handle_result(page, parse_resoult)
@@ -134,6 +135,7 @@ async def test_main() -> list[WineAtrrResoult]:
         print(parse_resoult)
         
         await browser.close()
+
 
     return parse_resoult
 
@@ -250,11 +252,11 @@ async def get_name_handle_result(page: Page, parse_resoult: list[WineAtrrResoult
             name = name or ''
         except Error as e2:
             name = ''
-            make_wine_atter_resoult(parse_resoult, page.url, 'name', [(e1, name1_xpath), (e2, name2_xpath)])
+            res = make_wine_atter_resoult(parse_resoult, page.url, 'name', [(e1, name1_xpath), (e2, name2_xpath)])
         else:
-            make_wine_atter_resoult(parse_resoult)
+            res = make_wine_atter_resoult(parse_resoult)
     else:
-        make_wine_atter_resoult(parse_resoult)
+        res = make_wine_atter_resoult(parse_resoult)
 
     name = " ".join(name.split())
 
@@ -287,17 +289,23 @@ async def get_vintage_handle_result(page: Page, parse_resoult: list[WineAtrrReso
 
     return vintage
 
-def make_wine_atter_resoult(parse_resoult: list[WineAtrrResoult], page_url:str = "", attr_name: str = "", err_xpath_list: list[tuple[Error, str]] | None = None):
+def make_wine_atter_resoult(parse_resoult: list[WineAtrrResoult], 
+                            page_url:str = "", attr_name: str = "", 
+                            err_xpath_list: list[tuple[Error, str]] | None = None) -> WineAtrrResoult:
+    res: WineAtrrResoult
     if not err_xpath_list:
-        parse_resoult.append(WineAtrrResoult())
+        res = WineAtrrResoult()
+        parse_resoult.append(res)
     else:
-        parse_resoult.append(WineAtrrResoult(
+        res = WineAtrrResoult(
             status=ResultStatus.ERROR.value, 
             page_url=page_url, 
             atrr_name=attr_name, 
-            err_type="_".join(("-".join([e.__class__.__name__, e.message, x]) for e, x in err_xpath_list))
+            err_type=list((" --- ".join([e.__class__.__name__, e.message, x]) for e, x in err_xpath_list))
             )
-            )
+        parse_resoult.append(res)
+    return res
+            
 def args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--concurency',
@@ -326,7 +334,9 @@ def args():
     
 
 if __name__ == '__main__':
-    # res = asyncio.run(test_main())
-    # with open('parse_res.json', 'w') as f:
-    #     f.write(json.dumps(res, indent=2))
-    print(args())
+    arg = args() 
+    print(arg)
+    # run test if '-c' == 1
+    if arg[0] == 1:
+        res = asyncio.run(test_main())
+        print(res)

@@ -30,6 +30,15 @@ FEED: Feed = JsonFeed()
 
 
 async def start_crawl(browser_context: BrowserContext, semaphore: Semaphore) -> ParseResult:
+    """crawl site. Start from maint page, move to catalog
+
+    Args:
+        browser_context (BrowserContext): browser context
+        semaphore (Semaphore): semaphote for limit concurrency
+
+    Returns:
+        ParseResult: parsing resoult
+    """
     parse_result = ParseResult()
     start_page_url = START_PAGE_URL
 
@@ -94,10 +103,10 @@ async def crawl_wine_catalog_page(
         semaphore: Semaphore, 
         wine_catalog_pag: Page
         ) -> ParseCatalogPageResult:
-    wine_card_paths: list[str | None] = \
-         [await l.get_attribute('href')
-          for l in \
-            await wine_catalog_pag.locator(XPATH_PREF.format(WINE_HREFS_XPATH)).all()]
+    """ parse wine catalog page, collect linc to wine page, run crawl and parse wine pages in diffetent tascks """
+
+    wine_card_paths: list[str | None] = [await l.get_attribute('href') for l 
+                                         in await wine_catalog_pag.locator(XPATH_PREF.format(WINE_HREFS_XPATH)).all()]
 
     wine_card_urls: list[str] = [urljoin(wine_catalog_pag.url, p) for p in wine_card_paths if p is not None]
 
@@ -116,6 +125,8 @@ async def goto_wine_page(
         referer: str, 
         semaphore: Semaphore
         ) -> ParseWinePageResult :
+    """ go to wine page """
+
     async with semaphore:
         page = await browser_context.new_page()
         try:
@@ -131,6 +142,9 @@ async def goto_wine_page(
 
 
 async def parse_wine_page(page: Page) -> list[WineAtrrResoult]:
+    """ parse wint page, write result in feed"""
+
+    page.set_default_timeout(5000)
     parse_resoult: list[WineAtrrResoult] = []
 
     # 3. Для каждой карточки вина формировать JSON‑объект со следующими полями:
@@ -169,13 +183,6 @@ async def parse_wine_page(page: Page) -> list[WineAtrrResoult]:
     
     # 3. Для каждой карточки вина формировать JSON‑объект со следующими полями: ...
     item = Wine(name, vintage, availability, image_url, Prise(price, currency), volume, order_size)
-    # используемая имплементация FEED не требует записывать 'write()' данные в отдельном 
-    # потоке, т.к. просто добавляет данные в проксированный list, сохранение данны
-    # происходит при вызове метода 'close()' однако это может стать
-    # удобно если мы захотим сделать имптементацию которая на каждый 'write()' будет делать
-    # блокирующий вызов, например писать в csv файл - поэтому отправляем данные в экзекутор
-    # FEED.write(item)
-    # asyncio._get_running_loop().run_in_executor(None, FEED.write, item)
     FEED.write(item)
     await page.close()
     return parse_resoult
@@ -192,25 +199,39 @@ def handle_page_goto_error(page_url:str, e: Error):
     result = CatalogPageGoToResult()
     result.status = ResultStatus.ERROR.value
     result.page_url = page_url
-    result.err_type = e.__class__.__name__
+    result.err_type.append(e.__class__.__name__)
     return result
     # pt = await page.title()
     
 def handle_resoult(resoult: ParseResult) -> dict:
-    res = asdict(resoult)
-    # print(res)
-    for r in res:
-        res[r] = list(filter(lambda i: i['status'] == ResultStatus.ERROR.value, res[r]))
-    return res
+    """ convert parsing result, calculates statistics, leaves false results """
 
-# для тестов
-def handle_resoult2(resoult: ParseResult):
-    res = asdict(resoult)
-    return res
+    catalog_page_crawl_count: int = len(resoult.CatalogPageGoToResults)
+    catalog_page_crawl_error_results: list = list(asdict(r) for r in resoult.CatalogPageGoToResults if r.status == ResultStatus.ERROR.value)
+    catalog_page_crawl_errot_count: int = len(catalog_page_crawl_error_results)
+    wine_page_crawl_count: int = len(resoult.WinePageGoToResults)
+    wine_page_crawl_error_results: list = list(asdict(r) for r in resoult.WinePageGoToResults if r.status == ResultStatus.ERROR.value)
+    wine_page_crawl_errot_count: int = len(wine_page_crawl_error_results)
+    wine_attr_parsing_count: int = len(resoult.WineAtrrResoults)
+    wine_attr_parsing_error_results: list = list(asdict(r) for r in resoult.WineAtrrResoults if r.status == ResultStatus.ERROR.value)
+    wine_attr_parsing_errot_count: int = len(wine_attr_parsing_error_results)
+    
+    return {
+        "catalog_page_crawl_count": catalog_page_crawl_count,
+        "catalog_page_crawl_errot_count": catalog_page_crawl_errot_count,
+        "wine_page_crawl_count": wine_page_crawl_count,
+        "wine_page_crawl_errot_count": wine_page_crawl_errot_count,
+        "wine_attr_parsing_count": wine_attr_parsing_count,
+        "wine_attr_parsing_errot_count": wine_attr_parsing_errot_count,
+        "catalog_page_crawl_error_results": catalog_page_crawl_error_results,
+        "wine_page_crawl_error_results": wine_page_crawl_error_results,
+        "wine_attr_parsing_error_results": wine_attr_parsing_error_results,
+    }
+
 
 def store_resoutl(resoult, resoult_file: str):
     with open(resoult_file, 'w') as f:
-        f.write(json.dumps(resoult, indent=2))
+        f.write(json.dumps(resoult, indent=2, ensure_ascii=False))
 
 
 async def main(concurency: int, headless_mode: bool, prod_mod: bool, 
@@ -227,11 +248,11 @@ async def main(concurency: int, headless_mode: bool, prod_mod: bool,
         semaphore = Semaphore(concurency)
         FEED.open(feed_file)
         result = await start_crawl(browser_context, semaphore)
-        result = handle_resoult2(result)
+        res = handle_resoult(result)
         asyncio.get_running_loop().run_in_executor(None, FEED.close)
-        asyncio.get_running_loop().run_in_executor(None, store_resoutl, result, res_file)
+        asyncio.get_running_loop().run_in_executor(None, store_resoutl, res, res_file)
         await browser.close()
-    return result
+    return res
 
 if __name__ == '__main__':
     concurency, headless_mode, prod_mod, feed_file, res_file = args()
