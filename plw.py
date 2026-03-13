@@ -1,12 +1,6 @@
-from dataclasses import dataclass, field, asdict
-from enum import Enum
+from dataclasses import asdict
 import json
-from items import Prise, Wine # type: ignore
-from util import ( # type: ignore
-    WINE_NAME1_XPATH, WINE_NAME2_XPATH,VINTAGE1_XPATH, VINTAGE2_XPATH, AVAILABILITY_XPATH,
-    IMG_URL_XPATH, PRICE_XPATH, CURRENCY_XPATH, VOLUME1_XPATH, VOLUME2_XPATH,
-    availability_convert, image_url_conver, volume_convert
-    ) 
+from plw_util import Feed, JsonFeed, ParseCatalogPageResult, ParseWinePageResult, Prise, Wine, args
 from playwright.async_api import BrowserContext, Locator, Response, async_playwright, Page, expect
 from playwright.async_api import Error
 import logging
@@ -16,6 +10,15 @@ from urllib.parse import urljoin
 from http import HTTPStatus
 import abc
 from lxml import etree # type: ignore
+from copy import deepcopy
+
+from plw_util import (
+    CatalogPageGoToResult, NavigationError, ParseResult, 
+    ResponseError, ResultStatus, WineAtrrResoult, WinePageGoToResult, 
+    get_availability_handle_result, get_currency_handle_result, 
+    get_image_url_handle_result, get_name_handle_result, get_price_handle_result, 
+    get_vintage_handle_result, get_volume_handle_result
+    )
 
 WINE_CARDS_XPATH = "//div[@class='catalog-item']"
 WINE_HREFS_XPATH = ".//div[@class='catalog-item__desc']/h2/a[@href]" # /@href"
@@ -23,78 +26,8 @@ NEXT_PAGE_XPATH = "//div[@class='paging_box']/.//a[@class='next']" # /@value"
 
 START_PAGE_URL = 'https://wine-butik.ru/'
 XPATH_PREF = 'xpath={}'
+FEED: Feed = JsonFeed()
 
-type ParseWinePageResult = tuple[WinePageGoToResult, list[WineAtrrResoult] | None]
-type ParseCatalogPageResult = list[ParseWinePageResult]
-
-
-class Feed(abc.ABC):
-    """ABC for feed"""
-
-    abc.abstractmethod
-    def open(self, file_name: str):
-        """file name for store feed"""
-
-    abc.abstractmethod
-    def write(self, item: Wine):
-        """write item to feed"""
-    
-    abc.abstractmethod
-    def close(self):
-        """close feed"""
-
-FEED: Feed
-
-
-class JsonFeed(Feed):
-
-    def open(self, file_name: str):
-        self.file_name = file_name
-        self.feed: list[dict] = []
-        return self
-
-    def write(self, item: Wine):
-        self.feed.append(asdict(item))
-    
-    def close(self):
-        with open(self.file_name, 'w') as f:
-            f.write(json.dumps(self.feed))
-
-
-class ResultStatus(Enum):
-    OK = True
-    ERROR = False
-
-@dataclass
-class Resoult:
-    status: bool = ResultStatus.OK.value
-    page_url: str = ""
-
-@dataclass
-class WineAtrrResoult(Resoult):
-    atrr_name: str = ""
-
-
-@dataclass
-class CatalogPageGoToResult(Resoult):
-    err_type: str | None = None
-
-@dataclass
-class WinePageGoToResult(CatalogPageGoToResult):
-    pass
-
-@dataclass
-class ParseResult:
-    CatalogPageGoToResults: list[CatalogPageGoToResult] = field(default_factory=list) 
-    WinePageGoToResults: list[WinePageGoToResult] = field(default_factory=list)
-    WineAtrrResoults: list[WineAtrrResoult] = field(default_factory=list)
-
-
-class NavigationError(Error):
-    pass
-
-class ResponseError(Error):
-    pass
 
 async def start_crawl(browser_context: BrowserContext, semaphore: Semaphore) -> ParseResult:
     parse_result = ParseResult()
@@ -156,7 +89,11 @@ async def start_crawl(browser_context: BrowserContext, semaphore: Semaphore) -> 
 
     return parse_result
 
-async def crawl_wine_catalog_page(browser_context: BrowserContext, semaphore: Semaphore, wine_catalog_pag: Page) -> ParseCatalogPageResult:
+async def crawl_wine_catalog_page(
+        browser_context: BrowserContext, 
+        semaphore: Semaphore, 
+        wine_catalog_pag: Page
+        ) -> ParseCatalogPageResult:
     wine_card_paths: list[str | None] = \
          [await l.get_attribute('href')
           for l in \
@@ -173,27 +110,27 @@ async def crawl_wine_catalog_page(browser_context: BrowserContext, semaphore: Se
     return tack_batch_results
 
 
-async def goto_wine_page(browser_context: BrowserContext, page_url: str, referer: str, semaphore: Semaphore) -> ParseWinePageResult :
+async def goto_wine_page(
+        browser_context: BrowserContext, 
+        page_url: str, 
+        referer: str, 
+        semaphore: Semaphore
+        ) -> ParseWinePageResult :
     async with semaphore:
         page = await browser_context.new_page()
         try:
-            response = await page.goto(page_url, referer=referer, timeout=60000)
+            response = await page.goto(page_url, referer=referer, wait_until='domcontentloaded')
             raise_err_response(page.url, response)
         except Error as e:
             page_goto_result = handle_page_goto_error(page.url, e)
             return (page_goto_result, None)
         else:
             page_goto_result = WinePageGoToResult()
-        test_response = await response.text() # type: ignore
-        wine_atrr_resoults = parse_wine_page(test_response, response.url) # type: ignore
-        # await page.wait_for_timeout(5000)
-        await page.close()
+        wine_atrr_resoults = await parse_wine_page(page)
     return page_goto_result, wine_atrr_resoults
-    # return page_goto_result, []
 
 
-def parse_wine_page(response: str, page_url: str) -> list[WineAtrrResoult]:
-    tree = etree.parse(response)
+async def parse_wine_page(page: Page) -> list[WineAtrrResoult]:
     parse_resoult: list[WineAtrrResoult] = []
 
     # 3. Для каждой карточки вина формировать JSON‑объект со следующими полями:
@@ -206,85 +143,42 @@ def parse_wine_page(response: str, page_url: str) -> list[WineAtrrResoult]:
     # - количество бутылок (минимальный/стандартный размер заказа, если указано).
     
     # - название вина;
-    name = tree.xpath(WINE_NAME1_XPATH).get(default='').strip()
-    # -- если название не найдено, то попробуем найти его в другом месте
-    name = name or tree.xpath(WINE_NAME2_XPATH).get(default='').strip()
-    make_wine_atеr_resoult(page_url, parse_resoult, name, 'name')
+    name = await get_name_handle_result(page, parse_resoult)
+
     # - винтаж (год);
-    # -- может выдаваться сервером в 3-х видах:
-    # --- в виде контента selected option из списка возможных годов
-    vintage_1 = tree.xpath(VINTAGE1_XPATH).get(default='').strip()
-    # --- в виде контента p где потомок em содержит 'Год' и контент содержит сам год 
-    # vintage_2 = response.xpath("//div[contains(@class, 'prod_param_2')]/p/em[contains(text(), 'Год')]/../text()").get()
-    # --- либо год не указан вообще
-    vintage = vintage_1 or tree.xpath(VINTAGE2_XPATH).get(default='').strip()
-    make_wine_atеr_resoult(page_url, parse_resoult, vintage, 'vintage')
+    vintage = await get_vintage_handle_result(page, parse_resoult)
 
     # - наличие (в наличии / нет);
-    # -- выдаётся в форме 'product-shop wait' или 'product-shop avail'
-    # -- обработку данных не стал выносить в Wine(Item) т.к. здесь удобнее это делать
-    availability: str = tree.xpath(AVAILABILITY_XPATH).get(default='')
-    availability = availability_convert(availability)
-    make_wine_atеr_resoult(page_url, parse_resoult, vintage, 'vintage')
+    availability = await get_availability_handle_result(page, parse_resoult)
 
     # - URL основной картинки товара;
-    image_url = tree.xpath(IMG_URL_XPATH).get(default='')
-    # -- выдаётся в форме path+query (/uploads/products/new/45038.png?6172812833f175.12245300)
-    image_url = image_url_conver(tree.url, image_url)
-    make_wine_atеr_resoult(page_url, parse_resoult, image_url, 'image_url')
+    image_url = await get_image_url_handle_result(page, parse_resoult)
 
     # - цена и валюта; price and currency
-    price = tree.xpath(PRICE_XPATH).get(default='')
-    make_wine_atеr_resoult(page_url, parse_resoult, price, 'price')
+    price = await get_price_handle_result(page, parse_resoult)
 
-    currency = tree.xpath(CURRENCY_XPATH).get(default='')
-    make_wine_atеr_resoult(page_url, parse_resoult, currency, 'currency')
+    currency = await get_currency_handle_result(page, parse_resoult)
 
     # - объем бутылки (например, 375ml, 750ml, 1500ml);
-    # -- выдаётся:
-    # --- в виде контента p где потомок em содержит 'Объем' и контент содержит сам объём 
-    volume_1 = tree.xpath(VOLUME1_XPATH).get(default='').strip()
-    # --- в виде контента selected option из списка возможных объёмов
-    volume = volume_1 or tree.xpath(VOLUME2_XPATH).get(default='').strip()
-    # -- выдаётся в форме  '0.75 л'
-    volume = volume_convert(volume)
-    make_wine_atеr_resoult(page_url, parse_resoult, volume, 'volume')
+    volume = await get_volume_handle_result(page, parse_resoult)
 
     # - количество бутылок (минимальный/стандартный размер заказа, если указано).
     # -- не указано на сайте
     order_size = ''
-    # не рассматриваем это значение как ошибку
-    make_wine_atеr_resoult(page_url, parse_resoult, 'True', 'order_size')
 
     
     # 3. Для каждой карточки вина формировать JSON‑объект со следующими полями: ...
-    # - в Item обработки данных нет, поэтому можно было бы использовать dict,
-    # - но т.к. он уже всё равно написан - сформируем запись из него
-
-    item = Wine(
-        name=name,
-        vintage=vintage,
-        availability=availability,
-        image_url=image_url,
-        price=Prise(price=price, currency=currency),
-        volume=volume,
-        order_size=order_size,
-    )
+    item = Wine(name, vintage, availability, image_url, Prise(price, currency), volume, order_size)
     # используемая имплементация FEED не требует записывать 'write()' данные в отдельном 
     # потоке, т.к. просто добавляет данные в проксированный list, сохранение данны
     # происходит при вызове метода 'close()' однако это может стать
     # удобно если мы захотим сделать имптементацию которая на каждый 'write()' будет делать
     # блокирующий вызов, например писать в csv файл - поэтому отправляем данные в экзекутор
     # FEED.write(item)
-    asyncio._get_running_loop().run_in_executor(None, FEED.write, item)
-
+    # asyncio._get_running_loop().run_in_executor(None, FEED.write, item)
+    FEED.write(item)
+    await page.close()
     return parse_resoult
-
-def make_wine_atеr_resoult(page_url:str, parse_resoult: list[WineAtrrResoult], attr: str, attr_name: str):
-    if attr:
-        parse_resoult.append(WineAtrrResoult())
-    else:
-        parse_resoult.append(WineAtrrResoult(status=ResultStatus.ERROR.value, page_url=page_url, atrr_name=attr_name))
 
 def raise_err_response(page_url: str, response: Response | None) -> None:
     if response is None:
@@ -314,25 +208,32 @@ def handle_resoult2(resoult: ParseResult):
     res = asdict(resoult)
     return res
 
-async def main():
+def store_resoutl(resoult, resoult_file: str):
+    with open(resoult_file, 'w') as f:
+        f.write(json.dumps(resoult, indent=2))
+
+
+async def main(concurency: int, headless_mode: bool, prod_mod: bool, 
+               feed_file :str, res_file: str):
+    
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(
             # channel='chrome',
-            headless=False,
+            headless=headless_mode,
             args=["--start-maximized", '--disable-blink-features=AutomationControlled']
         )
 
         browser_context = await browser.new_context(no_viewport=True)
-        semaphore = Semaphore(3)
-        FEED = JsonFeed().open("rez.json")
+        semaphore = Semaphore(concurency)
+        FEED.open(feed_file)
         result = await start_crawl(browser_context, semaphore)
         result = handle_resoult2(result)
-        # здесь блокирующий вызов
-        await asyncio.get_running_loop().run_in_executor(None, FEED.close)
+        asyncio.get_running_loop().run_in_executor(None, FEED.close)
+        asyncio.get_running_loop().run_in_executor(None, store_resoutl, result, res_file)
         await browser.close()
     return result
 
 if __name__ == '__main__':
-    res = asyncio.run(main())
-    with open('parse_res.json', 'w') as f:
-        f.write(json.dumps(res, indent=2))
+    concurency, headless_mode, prod_mod, feed_file, res_file = args()
+    asyncio.run(main(concurency, headless_mode, prod_mod, feed_file, res_file))
+    
