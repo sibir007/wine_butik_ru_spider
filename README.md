@@ -31,7 +31,9 @@
 3. Для каждой карточки вина формировать JSON‑объект со следующими полями:
     > Выполнено
     ```py
-     def parse_wine_page(self, response: Response) -> Generator[Wine, None, None]:
+    wine_list_query = "https://wine-butik.ru/wine/?limit=40&{}"
+
+    def parse_wine_page(self, response: Response) -> Generator[Wine, None, None]:
 
         # 3. Для каждой карточки вина формировать JSON‑объект со следующими полями:
         # - название вина;
@@ -97,5 +99,134 @@
     ```
 
 4. Инструкция, как запустить паука и получить JSON‑выгрузку (README или описание в отклике).
+   ```bash
+   # клонируем репозиторий
+   sibir007@sibir007:~/repos$ git clone https://github.com/sibir007/wine_butik_ru_spider.git wine_parser_doble
+   # заходм в дирректорию проекта
+   sibir007@sibir007:~/repos$ cd wine_parser_doble
+   # создаём и активируем окружение
+   sibir007@sibir007:~/repos/wine_parser_doble$ python3 -m venv .venv
+   sibir007@sibir007:~/repos/wine_parser_doble$ . .venv/bin/activate
+   (.venv) sibir007@sibir007:~/repos/wine_parser_doble$ 
+   # устанавливаем зависимости
+   (.venv) sibir007@sibir007:~/repos/wine_parser_doble$ pip install -r requirements.txt 
+   Collecting Scrapy==2.14.1 (from -r requirements.txt (line 1))
+     Using cached scrapy-2.14.1-py3-none-any.whl.metadata (4.3 kB)
+   Collecting pytest-playwright==0.7.2 (from -r requirements.txt (line 2))
+   ...
+   (.venv) sibir007@sibir007:~/repos/wine_parser_doble$ 
+   # установка браузеров для playwright
+   (.venv) sibir007@sibir007:~/repos/wine_parser_doble$ playwright install
+   # запускаем спайдера. 
+   # По уполчанию будет 1 конкурирущий запрос в секунду (т.е. будет долго) и максимум 7 страниц каталога будет обойдено (всё равно долго), ответы сохраняться в кэше и последующие вызовы будут братьcя из кэша (т.е. буде бытро) - менять настройками и аргументами командной строки (ниже). 
+   (.venv) sibir007@sibir007:~/repos/wine_parser_doble$ scrapy crawl wines -o feed.json 
+   (.venv) sibir007@sibir007:~/repos/wine_parser_doble$ ls -la feed.json 
+   -rw-rw-r-- 1 sibir007 sibir007 77310 Mar 13 20:05 feed.json
+   (.venv) sibir007@sibir007:~/repos/wine_parser_doble$ cat feed.json
+   [
+   {"name": "Фюг Де Ненан Помроль", "vintage": "2017", "availability": "avail", "image_url": "https://wine-butik.ru/uploads/products/new/44956.png", "price": {"price": "5600", "currency": "RUB"}, "volume": "750ml", "order_size": ""},
+   {"name": "Кумала Медиум Свит Уайт", "vintage": "", "availability": "wait", "image_url": "https://wine-butik.ru/uploads/products/new/33989.png", "price": {"price": "360", "currency": "RUB"}, "volume": "750ml", "order_size": ""},
+   {"name": "Вальжан", "vintage": "", "availability": "wait", "image_url": "https://wine-butik.ru/uploads/products/new/42977.png", "price": {"price": "460", "currency": "RUB"}, "volume": "750ml", "order_size": ""},
+   ...
+   ```
+5. Краткий комментарий, какие сложности встретились и как они решены 
+    - были ошибки при большом колличесве конкурирующих запростов, поэтому настройки для разрабоки установлены:
+      ```py
+      CONCURRENT_REQUESTS = 1
+      DOWNLOAD_DELAY = 2
+      RANDOMIZE_DOWNLOAD_DELAY = True
+      CONCURRENT_REQUESTS_PER_DOMAIN = 1
+      CACHE_ENABLED = True
+      HTTPCACHE_EXPIRATION_SECS = 0
+      ```
+      также спайдер принимает аргументы из коммандной строки:
+      ```py
+      def __init__(self, dev: bool = True, dpc: str = '7', *args, **kwargs: Any):
+          """_summary_
 
-Краткий комментарий, какие сложности встретились и как они решены (структура сайта, пагинация, фильтры и т.д.).
+          Args:
+              dev (bool, optional): set development mode. Defaults to True.
+              dpc (str, optional): count page to crawl in dev mod. Defaults to 7.
+          """
+      ```
+      т.е. по умолчанию девелопмент мод в котором по умолчанию производится обход 7 (dpc) страниц каталога, если `dev == False`, то колличество страниц не учитывается.
+    - сайт в кодировке windows-1251, поэтому feed сохранялся не правильно, устранено настройкой:
+      ```py
+      FEED_EXPORT_ENCODING = "utf-8"
+      ```
+(.venv) sibir007@sibir007:~/repos/wine_parser_doble$ uname -a
+Linux sibir007 6.17.0-14-generic #14~24.04.1-Ubuntu SMP PREEMPT_DYNAMIC Thu Jan 15 15:52:10 UTC 2 x86_64 x86_64 x86_64 GNU/Linux
+
+# Playwright implementation
+
+- зависимости установлены при установке ранее, однако могут потребоваться дополнительно устанавовить в зависимости от системы на которой производится запуск, подробнее https://playwright.dev/python/docs/intro#installing-playwright-pytest
+- в демо версии скрапер парсит только одну страницу каталога
+- скрапер принимает опцональные параметры:
+  ```bash
+  (.venv) sibir007@sibir007:~/repos/wine_parser_doble$ python3 plw.py -h
+    usage: plw.py [-h] [-c CONCURENCY] [-l] [-p] [-f FEED] [-r RES]
+
+    options:
+      -h, --help            show this help message and exit
+      -c CONCURENCY, --concurency CONCURENCY
+                            Count of concurrently opened and parsed wine pages
+      -l, --less            Headless mode. If -l pointed - borowser run in headless mode. Default headless=False
+      -p, --prod            Prodaction mod. If -p not pointed (i.e. set dev mod) - parsed only one catalog page.
+      -f FEED, --feed FEED  Feed output file. Default feed.json
+      -r RES, --res RES     Parse resoults output file. Default resoult.json
+  ```
+    - `-c` колличество конкурирующих запросов: скрапер одновременно отрывает несколько окон браузера со страницами вин и параллельно (конкурентно) парсит их, по умолчанию открывает 3
+    - `-l` по умолчанию браузет запустится не headless режиме
+    - `-p` продакшен режим не реализован, спарсится только одна страница каталога
+    - `-f` оутпут файл для feed
+    - `-r`оутпут файл для статистики парсинга
+- запуск
+  ```bash
+  # будет парсить по 10 страниц одновременно
+  (.venv) sibir007@sibir007:~/repos/wine_parser_doble$ python3 plw.py -c 10
+  ```
+  ![adminer](Screenshot%20from%202026-03-13%2021-15-24.png)
+
+  ```bash
+  (.venv) sibir007@sibir007:~/repos/wine_parser_doble$ cat feed.json 
+  [
+  {
+    "name": "Сангре де Торо Розовое 0.0.",
+    "vintage": "2020",
+    "availability": "avail",
+    "image_url": "https://wine-butik.ru/uploads/products/new/44679.png",
+    "price": {
+      "price": "930",
+      "currency": "RUB"
+    },
+    "volume": "750ml",
+    "order_size": ""
+  },
+  ...
+
+  (.venv) sibir007@sibir007:~/repos/wine_parser_doble$ cat resoult.json 
+    {
+      "catalog_page_crawl_count": 1,
+      "catalog_page_crawl_errot_count": 0,
+      "wine_page_crawl_count": 20,
+      "wine_page_crawl_errot_count": 0,
+      "wine_attr_parsing_count": 140,
+      "wine_attr_parsing_errot_count": 4,
+      "catalog_page_crawl_error_results": [],
+      "wine_page_crawl_error_results": [],
+      "wine_attr_parsing_error_results": [
+        {
+          "status": false,
+          "page_url": "https://wine-butik.ru/nonalco_sweet_white_sparkling/klaus-langhoff-whitewine-alcoholfree/",
+          "err_type": [
+            "TimeoutError --- Locator.text_content: Timeout 5000ms exceeded.\nCall log:\n  - waiting for locator(\"//div[contains(@class, 'prod_param_2')]/.//option[@selected]\")\n --- xpath=//div[contains(@class, 'prod_param_2')]/.//option[@selected]",
+            "TimeoutError --- Locator.text_content: Timeout 5000ms exceeded.\nCall log:\n  - waiting for locator(\"//div[contains(@class, 'prod_param_2')]/p/em[contains(text(), 'Год')]\").locator(\"..\")\n --- xpath=//div[contains(@class, 'prod_param_2')]/p/em[contains(text(), 'Год')]"
+          ],
+          "atrr_name": "vintage"
+        },
+        {
+          "status": false,
+          "page_url": "https://wine-butik.ru/dry_red/muelle-tempranillo-syrah-tierra-de-castilla-igp/",
+          "err_type": [
+          
+  ```

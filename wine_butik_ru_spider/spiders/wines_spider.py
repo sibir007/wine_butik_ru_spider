@@ -4,9 +4,9 @@ import logging
 from pathlib import Path
 from typing import Any, cast
 
-from parsel import SelectorList
-import scrapy
-from scrapy.http import Response, Request, HtmlResponse
+from parsel import SelectorList # type: ignore
+import scrapy # type: ignore
+from scrapy.http import Response, Request, HtmlResponse # type: ignore
 
 # from scrapy import 
 
