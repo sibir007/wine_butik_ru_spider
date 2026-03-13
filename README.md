@@ -9,6 +9,8 @@
 1. Начинать обход с главной страницы, каталога или sitemap (на твой выбор).
     > Выплнено. 
     ```py
+   wine_list_query = "https://wine-butik.ru/wine/?limit=40&{}"
+
    async def start(self) -> AsyncGenerator[Request, None]:
       # 1. Начинать обход с главной страницы, каталога или sitemap (на твой выбор).
       # - начинаем с каталога            
@@ -31,7 +33,6 @@
 3. Для каждой карточки вина формировать JSON‑объект со следующими полями:
     > Выполнено
     ```py
-    wine_list_query = "https://wine-butik.ru/wine/?limit=40&{}"
 
     def parse_wine_page(self, response: Response) -> Generator[Wine, None, None]:
 
